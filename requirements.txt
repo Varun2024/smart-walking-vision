@@ -1,0 +1,9 @@
+numpy
+opencv-python
+pygame
+gTTS
+requests
+onnxruntime
+onnx
+ultralytics
+pytest
