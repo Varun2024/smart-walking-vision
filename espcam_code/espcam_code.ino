@@ -2,15 +2,15 @@
 #include <WiFi.h>
 #include <esp32cam.h>
  
-const char* WIFI_SSID = "realme P1 5G";
-const char* WIFI_PASS = "h9epyfaa";
+const char* WIFI_SSID = "Galaxy M31sB1C1";
+const char* WIFI_PASS = "xfwh9956";
  
 WebServer server(80);
  
- 
 static auto loRes = esp32cam::Resolution::find(320, 240);
-static auto midRes = esp32cam::Resolution::find(350, 530);
+static auto midRes = esp32cam::Resolution::find(640, 480);
 static auto hiRes = esp32cam::Resolution::find(800, 600);
+
 void serveJpg()
 {
   auto frame = esp32cam::capture();
@@ -54,7 +54,7 @@ void handleJpgMid()
  
  
 void  setup(){
-  Serial.begin(921600);
+  Serial.begin(115200);
   Serial.println();
   {
     using namespace esp32cam;
@@ -72,7 +72,10 @@ void  setup(){
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
+    Serial.print(".");
   }
+  Serial.println();
+  Serial.println("WiFi Connected");
   Serial.print("http://");
   Serial.println(WiFi.localIP());
   Serial.println("  /cam-lo.jpg");

@@ -25,6 +25,13 @@
       "infer_every": 1
     }
   },
+  "esp32_snapshot_profile": {
+    "quality": "fast",
+    "model_size": 320,
+    "infer_every": 2,
+    "snapshot_timeout": 2.0,
+    "snapshot_retry_delay": 0.08
+  },
   "world_default_classes": [
     "person",
     "watch",
@@ -92,6 +99,9 @@
     "pose_every": 10,
     "pose_model": "yolov8n-pose.pt",
     "enable_speech": true,
-    "prefer_int8": false
+    "prefer_int8": false,
+    "esp32_auto_optimize": true,
+    "snapshot_timeout": 2.0,
+    "snapshot_retry_delay": 0.08
   }
 }

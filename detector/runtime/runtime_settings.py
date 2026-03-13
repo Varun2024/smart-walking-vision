@@ -9,6 +9,13 @@ FALLBACK_SETTINGS = {
 		'balanced': {'model_size': 416, 'confidence': 0.45, 'nms_threshold': 0.40, 'width': 1280, 'height': 720, 'infer_every': 1},
 		'accurate': {'model_size': 608, 'confidence': 0.40, 'nms_threshold': 0.40, 'width': 1280, 'height': 720, 'infer_every': 1},
 	},
+	'esp32_snapshot_profile': {
+		'quality': 'fast',
+		'model_size': 320,
+		'infer_every': 2,
+		'snapshot_timeout': 2.0,
+		'snapshot_retry_delay': 0.08,
+	},
 	'world_default_classes': [
 		'person', 'watch', 'cell phone', 'backpack', 'bottle', 'chair', 'car', 'traffic cone', 'barrier', 'pothole'
 	],
@@ -29,6 +36,9 @@ FALLBACK_SETTINGS = {
 		'pose_model': 'yolov8n-pose.pt',
 		'enable_speech': True,
 		'prefer_int8': False,
+		'esp32_auto_optimize': True,
+		'snapshot_timeout': 2.0,
+		'snapshot_retry_delay': 0.08,
 	},
 }
 

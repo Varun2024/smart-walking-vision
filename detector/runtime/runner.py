@@ -47,19 +47,40 @@ def parse_args():
 	parser.add_argument('--pose-model', default=None, help='Pose model for fall detection')
 	parser.add_argument('--speech-cooldown', type=float, default=None, help='Seconds before repeating same label')
 	parser.add_argument('--speech-gap', type=float, default=None, help='Minimum seconds between any two spoken messages')
+	parser.add_argument('--snapshot-timeout', type=float, default=None, help='HTTP snapshot timeout in seconds (ESP32-CAM mode)')
+	parser.add_argument('--snapshot-retry-delay', type=float, default=None, help='Retry delay after snapshot fetch failure in seconds')
 	parser.add_argument('--no-speech', action='store_true', help='Disable gTTS announcements')
 	return parser.parse_args()
+
+
+def _is_snapshot_style_source(source: str):
+	text = source.strip().lower()
+	if text == 'espcam':
+		return True
+	if not text.startswith(('http://', 'https://')):
+		return False
+	if text.endswith(('.jpg', '.jpeg', '.png')):
+		return True
+	if text.endswith('/'):
+		return True
+	last_segment = text.rsplit('/', 1)[-1]
+	return '.' not in last_segment
 
 
 def build_config(args) -> DetectorConfig:
 	settings = load_runtime_settings(args.config)
 	defaults = settings['defaults']
 	quality_presets = settings['quality_presets']
+	esp32_profile = settings.get('esp32_snapshot_profile', {})
 	world_default_classes = tuple(settings['world_default_classes'])
 
 	source = DEFAULT_SNAPSHOT_URL if args.source.lower() == 'espcam' else args.source
+	is_snapshot_source = _is_snapshot_style_source(args.source)
+	auto_optimize_esp32 = bool(defaults.get('esp32_auto_optimize', True)) and is_snapshot_source
 
 	quality = args.quality if args.quality is not None else defaults['quality']
+	if auto_optimize_esp32 and args.quality is None:
+		quality = esp32_profile.get('quality', 'fast')
 	preset = quality_presets[quality]
 
 	model_type = args.model_type if args.model_type is not None else defaults['model_type']
@@ -73,6 +94,10 @@ def build_config(args) -> DetectorConfig:
 	width = args.width if args.width is not None else preset['width']
 	height = args.height if args.height is not None else preset['height']
 	infer_every = args.infer_every if args.infer_every is not None else preset['infer_every']
+	if auto_optimize_esp32 and args.model_size is None:
+		model_size = int(esp32_profile.get('model_size', 320))
+	if auto_optimize_esp32 and args.infer_every is None:
+		infer_every = int(esp32_profile.get('infer_every', 2))
 	infer_every = max(1, infer_every)
 	hybrid_world_every_default = int(defaults['hybrid_world_every'])
 	hybrid_world_every = max(1, args.hybrid_world_every if args.hybrid_world_every is not None else hybrid_world_every_default)
@@ -80,6 +105,12 @@ def build_config(args) -> DetectorConfig:
 	persistence_window = max(1, args.persistence_window if args.persistence_window is not None else persistence_window_default)
 	speech_cooldown = args.speech_cooldown if args.speech_cooldown is not None else float(defaults['speech_cooldown'])
 	speech_gap = args.speech_gap if args.speech_gap is not None else float(defaults['speech_gap'])
+	snapshot_timeout = args.snapshot_timeout if args.snapshot_timeout is not None else float(defaults.get('snapshot_timeout', 2.0))
+	if auto_optimize_esp32 and args.snapshot_timeout is None:
+		snapshot_timeout = float(esp32_profile.get('snapshot_timeout', snapshot_timeout))
+	snapshot_retry_delay = args.snapshot_retry_delay if args.snapshot_retry_delay is not None else float(defaults.get('snapshot_retry_delay', 0.08))
+	if auto_optimize_esp32 and args.snapshot_retry_delay is None:
+		snapshot_retry_delay = float(esp32_profile.get('snapshot_retry_delay', snapshot_retry_delay))
 	pose_every_default = int(defaults['pose_every'])
 	pose_every = max(1, args.pose_every if args.pose_every is not None else pose_every_default)
 	pose_model = args.pose_model if args.pose_model is not None else defaults['pose_model']
@@ -130,6 +161,8 @@ def build_config(args) -> DetectorConfig:
 		speech_cooldown_seconds=speech_cooldown,
 		speech_gap_seconds=speech_gap,
 		enable_speech=enable_speech,
+		snapshot_timeout_seconds=max(0.1, snapshot_timeout),
+		snapshot_retry_delay_seconds=max(0.01, snapshot_retry_delay),
 	)
 
 
@@ -253,11 +286,11 @@ def run():
 			print('Tip: ensure ultralytics package is installed and internet is available for first model download.')
 			return
 
-	cap, snapshot_mode = open_video_source(config.source)
+	cap, snapshot_mode, resolved_source = open_video_source(config.source)
 	if not snapshot_mode:
 		configure_capture(cap, config.frame_width, config.frame_height)
 		if cap is None or not cap.isOpened():
-			print(f'Unable to open source: {config.source}')
+			print(f'Unable to open source: {resolved_source}')
 			return
 
 	async_capture = None
@@ -289,12 +322,20 @@ def run():
 				if async_capture is not None:
 					success, frame = async_capture.read()
 				else:
-					success, frame = read_frame(cap, config.source, snapshot_mode)
+					success, frame = read_frame(
+						cap,
+						resolved_source,
+						snapshot_mode,
+						config.snapshot_timeout_seconds,
+					)
 			except Exception as exc:
 				print(f'Frame read error: {exc}')
 				break
 
 			if not success:
+				if snapshot_mode:
+					time.sleep(config.snapshot_retry_delay_seconds)
+					continue
 				if async_capture is not None:
 					time.sleep(0.005)
 					continue

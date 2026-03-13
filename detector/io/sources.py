@@ -5,6 +5,24 @@ import time
 import urllib.request
 
 
+def _resolve_http_source(source: str):
+	lower_source = source.lower()
+	if not lower_source.startswith(('http://', 'https://')):
+		return source, False
+
+	if lower_source.endswith(('.jpg', '.jpeg', '.png')):
+		return source, True
+
+	# Support ESP32-CAM base URLs like http://<ip>/ by defaulting to a high-res snapshot endpoint.
+	if source.endswith('/'):
+		return f'{source}cam-hi.jpg', True
+
+	if source.rsplit('/', 1)[-1].find('.') == -1:
+		return f'{source}/cam-hi.jpg', True
+
+	return source, False
+
+
 def open_video_source(source: str):
 	source = source.strip()
 
@@ -13,14 +31,14 @@ def open_video_source(source: str):
 		cap = cv2.VideoCapture(cam_index, cv2.CAP_DSHOW)
 		if not cap.isOpened():
 			cap = cv2.VideoCapture(cam_index)
-		return cap, False
+		return cap, False, source
 
-	is_snapshot_url = source.lower().startswith('http') and source.lower().endswith(('.jpg', '.jpeg', '.png'))
+	source, is_snapshot_url = _resolve_http_source(source)
 	if is_snapshot_url:
-		return None, True
+		return None, True, source
 
 	cap = cv2.VideoCapture(source)
-	return cap, False
+	return cap, False, source
 
 
 def configure_capture(cap, frame_width: int, frame_height: int):
@@ -33,14 +51,18 @@ def configure_capture(cap, frame_width: int, frame_height: int):
 	cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
 
 
-def read_frame(cap, source: str, snapshot_mode: bool):
+def read_frame(cap, source: str, snapshot_mode: bool, snapshot_timeout_seconds: float = 5.0):
 	if snapshot_mode:
-		img_resp = urllib.request.urlopen(source, timeout=5)
-		img_np = np.array(bytearray(img_resp.read()), dtype=np.uint8)
-		frame = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
-		if frame is None:
+		try:
+			img_resp = urllib.request.urlopen(source, timeout=max(0.1, float(snapshot_timeout_seconds)))
+			img_np = np.array(bytearray(img_resp.read()), dtype=np.uint8)
+			frame = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
+			if frame is None:
+				return False, None
+			return True, frame
+		except Exception:
+			# Snapshot endpoints can time out intermittently on weak Wi-Fi links.
 			return False, None
-		return True, frame
 
 	return cap.read()
 

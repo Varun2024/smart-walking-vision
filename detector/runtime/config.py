@@ -34,3 +34,5 @@ class DetectorConfig:
 	speech_cooldown_seconds: float = 2.5
 	speech_gap_seconds: float = 1.5
 	enable_speech: bool = True
+	snapshot_timeout_seconds: float = 2.0
+	snapshot_retry_delay_seconds: float = 0.08
